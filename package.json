@@ -1,0 +1,17 @@
+{
+  "name": "krayin-mcp",
+  "version": "0.1.0",
+  "description": "MCP server exposing a Krayin CRM instance to AI agents (Claude) via Krayin's REST API",
+  "type": "module",
+  "main": "src/server.js",
+  "bin": { "krayin-mcp": "src/server.js" },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test \"test/adapter.test.js\""
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0"
+  }
+}
