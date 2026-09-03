@@ -38,13 +38,29 @@ export function buildTools(client) {
         organization_id: z.number().int().optional(),
         extra: z.record(z.any()).optional().describe("Any additional Krayin person attributes, passed through"),
       },
-      handler: ({ extra, ...fields }) => client.post("contacts/persons", { ...fields, ...(extra || {}) }),
+      // emails and contact_numbers must always be sent, even empty. Two
+      // separate breakages otherwise: rest-api's
+      // PersonController::sanitizeRequestedPersonData() reads contact_numbers
+      // unguarded (500 on create), and a person stored with a null emails
+      // column crashes the lead view blade, which foreach-es it without a
+      // guard. Empty arrays keep both happy.
+      handler: ({ extra, ...fields }) =>
+        client.post("contacts/persons", {
+          emails: [],
+          contact_numbers: [],
+          ...fields,
+          ...(extra || {}),
+        }),
     },
     {
       name: "krayin_update_person",
       description: "Update fields on an existing person (same shape as create).",
       schema: { id: z.number().int(), fields: z.record(z.any()).describe("Fields to update") },
-      handler: ({ id, fields }) => client.put(`contacts/persons/${id}`, fields),
+      handler: ({ id, fields }) =>
+        client.put(`contacts/persons/${id}`, {
+          contact_numbers: [],
+          ...fields,
+        }),
     },
     {
       name: "krayin_list_organizations",
@@ -80,7 +96,7 @@ export function buildTools(client) {
     {
       name: "krayin_create_lead",
       description:
-        "Create a lead. Minimal: title. Pipeline/stage/source/type ids are auto-filled from the instance defaults (default pipeline's first stage, 'Direct' source, 'New Business' type) unless provided. Common fields: description, lead_value, person (object with id, or name/emails to create inline), expected_close_date (YYYY-MM-DD).",
+        "Create a lead (a roof job). Minimal: title. Pipeline/stage/source/type ids are auto-filled from the instance defaults (default pipeline's first stage, 'Not Recorded' source, 'Insurance Claim' type) unless provided. Common fields: description, lead_value, person (object with id, or name/emails to create inline), expected_close_date (YYYY-MM-DD). Roofing attributes go in extra: property_address, jurisdiction, storm_date, carrier, claim_number, deductible, rcv_policy, code_upgrade_coverage, squares, roof_manufacturer, roof_product, install_date, reroof_due, employer_at_time, commission_notes.",
       schema: {
         title: z.string(),
         description: z.string().optional(),
@@ -100,12 +116,12 @@ export function buildTools(client) {
         }
         if (!payload.lead_source_id) {
           const src = await client.get("settings/sources");
-          const s = (src?.data || []).find((x) => x.name === "Direct") || src?.data?.[0];
+          const s = (src?.data || []).find((x) => x.name === "Not Recorded") || src?.data?.[0];
           if (s) payload.lead_source_id = s.id;
         }
         if (!payload.lead_type_id) {
           const types = await client.get("settings/types");
-          const t = (types?.data || []).find((x) => x.name === "New Business") || types?.data?.[0];
+          const t = (types?.data || []).find((x) => x.name === "Insurance Claim") || types?.data?.[0];
           if (t) payload.lead_type_id = t.id;
         }
         payload.lead_value ??= 0;
@@ -125,9 +141,22 @@ export function buildTools(client) {
     },
     {
       name: "krayin_update_lead",
-      description: "Update fields on a lead.",
+      description:
+        "Update fields on a lead. Select attributes (jurisdiction, carrier, roof_manufacturer, employer_at_time) take the attribute OPTION ID, not the label.",
       schema: { id: z.number().int(), fields: z.record(z.any()) },
-      handler: ({ id, fields }) => client.put(`leads/${id}`, fields),
+      // krayin/rest-api's LeadController::update reads lead_pipeline_stage_id
+      // unguarded, so a partial update without it 500s. Carry the lead's
+      // current stage forward unless the caller is deliberately moving it.
+      handler: async ({ id, fields }) => {
+        const payload = { ...fields };
+        if (payload.lead_pipeline_stage_id === undefined) {
+          const current = await client.get(`leads/${id}`);
+          const stageId =
+            current?.data?.lead_pipeline_stage_id ?? current?.data?.stage?.id;
+          if (stageId) payload.lead_pipeline_stage_id = stageId;
+        }
+        return client.put(`leads/${id}`, payload);
+      },
     },
     {
       name: "krayin_move_lead_stage",
