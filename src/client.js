@@ -19,9 +19,15 @@ export class KrayinClient {
   async login() {
     const res = await this.fetch(this.api("login"), {
       method: "POST",
+      redirect: "manual",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ email: this.email, password: this.password, device_name: "krayin-mcp" }),
     });
+    if (res.status >= 300 && res.status < 400) {
+      throw new Error(
+        "Krayin login was redirected instead of answered - with APP_DEBUG=false Krayin hides auth errors this way. Almost always wrong KRAYIN_EMAIL/KRAYIN_PASSWORD."
+      );
+    }
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(`Krayin login failed (${res.status}): ${JSON.stringify(body)}`);
     // Krayin returns the token under data.token or token depending on version.
@@ -35,6 +41,7 @@ export class KrayinClient {
     const doFetch = () =>
       this.fetch(this.api(path), {
         method,
+        redirect: "manual",
         headers: {
           Authorization: `Bearer ${this.token}`,
           Accept: "application/json",
@@ -44,6 +51,15 @@ export class KrayinClient {
       });
 
     let res = await doFetch();
+    if (res.status >= 300 && res.status < 400) {
+      // Krayin (APP_DEBUG=false) disguises API errors, including bad
+      // credentials and auth failures, as redirects to the admin login page.
+      const err = new Error(
+        `Krayin API ${method} /${path} -> redirect (${res.status}). This usually means invalid credentials or an API-side error hidden by APP_DEBUG=false. Check KRAYIN_EMAIL/KRAYIN_PASSWORD.`
+      );
+      err.status = res.status;
+      throw err;
+    }
     if (res.status === 401 && this.email && this.password) {
       // token expired or revoked: re-login once
       await this.login();
