@@ -80,7 +80,7 @@ export function buildTools(client) {
     {
       name: "krayin_create_lead",
       description:
-        "Create a lead. Minimal: title. Common fields: description, lead_value, person (object with id, or name/emails to create inline), lead_pipeline_id, lead_pipeline_stage_id, lead_source_id, lead_type_id, expected_close_date (YYYY-MM-DD).",
+        "Create a lead. Minimal: title. Pipeline/stage/source/type ids are auto-filled from the instance defaults (default pipeline's first stage, 'Direct' source, 'New Business' type) unless provided. Common fields: description, lead_value, person (object with id, or name/emails to create inline), expected_close_date (YYYY-MM-DD).",
       schema: {
         title: z.string(),
         description: z.string().optional(),
@@ -88,7 +88,40 @@ export function buildTools(client) {
         person: z.record(z.any()).optional(),
         extra: z.record(z.any()).optional(),
       },
-      handler: ({ extra, ...fields }) => client.post("leads", { ...fields, ...(extra || {}) }),
+      handler: async ({ extra, ...fields }) => {
+        const payload = { ...fields, ...(extra || {}) };
+        if (!payload.lead_pipeline_stage_id || !payload.lead_pipeline_id) {
+          const pipes = await client.get("settings/pipelines");
+          const pipe = (pipes?.data || []).find((p) => p.is_default) || pipes?.data?.[0];
+          if (pipe) {
+            payload.lead_pipeline_id ??= pipe.id;
+            payload.lead_pipeline_stage_id ??= pipe.stages?.[0]?.id;
+          }
+        }
+        if (!payload.lead_source_id) {
+          const src = await client.get("settings/sources");
+          const s = (src?.data || []).find((x) => x.name === "Direct") || src?.data?.[0];
+          if (s) payload.lead_source_id = s.id;
+        }
+        if (!payload.lead_type_id) {
+          const types = await client.get("settings/types");
+          const t = (types?.data || []).find((x) => x.name === "New Business") || types?.data?.[0];
+          if (t) payload.lead_type_id = t.id;
+        }
+        payload.lead_value ??= 0;
+        payload.expected_close_date ??= null;
+        return client.post("leads", payload);
+      },
+    },
+    {
+      name: "krayin_list_pipelines",
+      description: "List pipelines with their stages (ids needed for stage moves), plus lead sources and types.",
+      schema: {},
+      handler: async () => ({
+        pipelines: await client.get("settings/pipelines"),
+        sources: await client.get("settings/sources"),
+        types: await client.get("settings/types"),
+      }),
     },
     {
       name: "krayin_update_lead",
