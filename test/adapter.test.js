@@ -66,6 +66,12 @@ test("re-logins once on 401 then retries", async () => {
   assert.equal(client.token, "FRESH");
 });
 
+test("turns a login redirect into a clear credentials error", async () => {
+  const fetchImpl = mockFetch([{ match: "/api/v1/login", method: "POST", status: 302, reply: {} }]);
+  const client = new KrayinClient({ ...env, fetchImpl });
+  await assert.rejects(client.get("leads"), /redirected instead of answered/);
+});
+
 test("tools hit the documented Krayin endpoints", async () => {
   const fetchImpl = mockFetch([
     { match: "/api/v1/login", method: "POST", reply: { token: "T" } },
