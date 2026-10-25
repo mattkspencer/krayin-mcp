@@ -36,7 +36,7 @@ export function buildTools(client) {
         contact_numbers: z.array(z.object({ value: z.string(), label: z.string().default("work") })).optional(),
         job_title: z.string().optional(),
         organization_id: z.number().int().optional(),
-        extra: z.record(z.any()).optional().describe("Any additional Krayin person attributes, passed through"),
+        extra: z.record(z.string(), z.any()).optional().describe("Any additional Krayin person attributes, passed through"),
       },
       // emails and contact_numbers must always be sent, even empty. Two
       // separate breakages otherwise: rest-api's
@@ -55,7 +55,7 @@ export function buildTools(client) {
     {
       name: "krayin_update_person",
       description: "Update fields on an existing person (same shape as create).",
-      schema: { id: z.number().int(), fields: z.record(z.any()).describe("Fields to update") },
+      schema: { id: z.number().int(), fields: z.record(z.string(), z.any()).describe("Fields to update") },
       handler: ({ id, fields }) =>
         client.put(`contacts/persons/${id}`, {
           contact_numbers: [],
@@ -71,7 +71,7 @@ export function buildTools(client) {
     {
       name: "krayin_create_organization",
       description: "Create an organization (company).",
-      schema: { name: z.string(), extra: z.record(z.any()).optional() },
+      schema: { name: z.string(), extra: z.record(z.string(), z.any()).optional() },
       handler: ({ name, extra }) => client.post("contacts/organizations", { name, ...(extra || {}) }),
     },
     {
@@ -84,7 +84,7 @@ export function buildTools(client) {
       name: "krayin_list_leads",
       description:
         "List leads, optionally filtered. Supports Krayin index params like pipeline/stage pagination passed through as-is.",
-      schema: { params: z.record(z.any()).optional().describe("Query params, e.g. {page: 1}") },
+      schema: { params: z.record(z.string(), z.any()).optional().describe("Query params, e.g. {page: 1}") },
       handler: ({ params }) => client.get(`leads${qs(params)}`),
     },
     {
@@ -101,8 +101,8 @@ export function buildTools(client) {
         title: z.string(),
         description: z.string().optional(),
         lead_value: z.number().optional(),
-        person: z.record(z.any()).optional(),
-        extra: z.record(z.any()).optional(),
+        person: z.record(z.string(), z.any()).optional(),
+        extra: z.record(z.string(), z.any()).optional(),
       },
       handler: async ({ extra, ...fields }) => {
         const payload = { ...fields, ...(extra || {}) };
@@ -143,7 +143,7 @@ export function buildTools(client) {
       name: "krayin_update_lead",
       description:
         "Update fields on a lead. Select attributes (jurisdiction, carrier, roof_manufacturer, employer_at_time) take the attribute OPTION ID, not the label.",
-      schema: { id: z.number().int(), fields: z.record(z.any()) },
+      schema: { id: z.number().int(), fields: z.record(z.string(), z.any()) },
       // krayin/rest-api's LeadController::update reads lead_pipeline_stage_id
       // unguarded, so a partial update without it 500s. Carry the lead's
       // current stage forward unless the caller is deliberately moving it.
@@ -188,26 +188,26 @@ export function buildTools(client) {
         schedule_from: z.string().optional(),
         schedule_to: z.string().optional(),
         lead_id: z.number().int().optional(),
-        extra: z.record(z.any()).optional(),
+        extra: z.record(z.string(), z.any()).optional(),
       },
       handler: ({ extra, ...fields }) => client.post("activities", { ...fields, ...(extra || {}) }),
     },
     {
       name: "krayin_list_activities",
       description: "List activities (follow-ups, notes, meetings). Pass params for filtering/pagination.",
-      schema: { params: z.record(z.any()).optional() },
+      schema: { params: z.record(z.string(), z.any()).optional() },
       handler: ({ params }) => client.get(`activities${qs(params)}`),
     },
     {
       name: "krayin_tag_lead",
       description: "Attach a tag to a lead. Provide existing tag id, or name to create/attach.",
-      schema: { id: z.number().int(), tag: z.record(z.any()).describe("{id} or {name, color?}") },
+      schema: { id: z.number().int(), tag: z.record(z.string(), z.any()).describe("{id} or {name, color?}") },
       handler: ({ id, tag }) => client.post(`leads/${id}/tags`, tag),
     },
     {
       name: "krayin_tag_person",
       description: "Attach a tag to a person. Provide existing tag id, or name to create/attach.",
-      schema: { id: z.number().int(), tag: z.record(z.any()) },
+      schema: { id: z.number().int(), tag: z.record(z.string(), z.any()) },
       handler: ({ id, tag }) => client.post(`contacts/persons/${id}/tags`, tag),
     },
     {
@@ -217,7 +217,7 @@ export function buildTools(client) {
       schema: {
         method: z.enum(["GET", "POST", "PUT", "DELETE"]),
         path: z.string(),
-        body: z.record(z.any()).optional(),
+        body: z.record(z.string(), z.any()).optional(),
       },
       handler: ({ method, path, body }) => client.request(method, path, body),
     },
